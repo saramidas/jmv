@@ -4,5 +4,5 @@
 // os dados é o login e as regras do banco.
 window.JMV_CONFIG = {
   supabaseUrl: "https://qnmyqznvjzprizuiudgz.supabase.co",
-  supabaseAnonKey: ""
+  supabaseAnonKey: "sb_publishable_Kbv5XZJ4jbO-XKIg8Z0dDw_Yz-ziJQ0"
 };
