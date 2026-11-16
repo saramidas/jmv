@@ -419,7 +419,12 @@ function nav(){
     b('dividas','Dívidas',I.dividas)+`<button data-act="menu" ${outros?'style="color:var(--accent)"':''}>${I.menu}<span>Mais</span></button>`;
 }
 function head(title,eyebrow,right=''){return `<div class="topbar"><div class="stack" style="gap:2px"><span class="eyebrow">${esc(eyebrow)}</span><h1>${esc(title)}</h1></div><div class="right">${right}</div></div>`}
-function render(){if(!state)return;
+function falha(e){console.error(e);const gate=$('#gate'),marca='<div class="brand"><span class="mark">JMV</span><span><b>JMV Eucaliptos</b><small>Plano de caixa</small></span></div>';gate.hidden=false;gate.innerHTML=`<div class="box">${marca}<h1>Não carregou</h1><p class="muted">Aconteceu um erro ao abrir o sistema. Recarregue a página. Se continuar, mande um print desta tela.</p><p class="tiny muted">${esc((e&&(e.message||e.reason&&e.reason.message))||String(e))}</p><button class="btn primary" onclick="location.reload()">Recarregar</button></div>`}
+function travada(){const g=$('#gate');return g&&(g.hidden&&$('#main').innerHTML===''||/Abrindo|Carregando/.test(g.textContent))}
+window.addEventListener('error',e=>{if(travada())falha(e.error||e)});
+window.addEventListener('unhandledrejection',e=>{if(travada())falha(e.reason||e)});
+function render(){if(!state)return;try{render0()}catch(e){falha(e)}}
+function render0(){
   const r=(location.hash||'#painel').slice(1);UI.route=ROUTES.some(x=>x[0]===r)?r:'painel';
   nav();
   const P={painel:pgPainel,plano:pgPlano,dividas:pgDividas,bens:pgBens,folha:pgFolha,materia:pgMateria,relatorio:pgRelatorio,ajustes:pgAjustes}[UI.route];
@@ -1074,6 +1079,7 @@ async function iniciar(){const{data:{session}}=await sb.auth.getSession();if(!se
   if(!state){gate.innerHTML=`<div class="box">${marca}<h1>Banco sem dados</h1><p class="muted">Os dados iniciais da JMV ainda não foram carregados no banco.</p></div>`;return}
   gate.hidden=true;gate.innerHTML='';const w=document.getElementById('whoami');if(w)w.textContent=usuario;render()}
 async function boot(){
+  gate.hidden=false;gate.innerHTML=`<div class="box">${marca}<p class="muted">Abrindo…</p></div>`;
   if(!CFG.supabaseUrl||!CFG.supabaseAnonKey||!window.supabase)return telaConfig();
   const convite=/type=(recovery|invite)/.test(location.hash);
   sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
@@ -1081,11 +1087,11 @@ async function boot(){
   const{data:{session}}=await sb.auth.getSession();
   if(convite&&session){history.replaceState(null,'',location.pathname);return telaSenha(true)}
   if(convite)history.replaceState(null,'',location.pathname);
-  iniciar();
+  iniciar().catch(falha);
   setInterval(async()=>{if(!state||document.hidden||!$('#sheetbg').hidden||pendente||salvando)return;
     const{data}=await sb.from('jmv_estado').select('versao,atualizado_por').eq('id',1).maybeSingle();
     if(data&&data.versao>versao){await recarregar();toast('Dados atualizados'+(data.atualizado_por?' por '+data.atualizado_por:''))}},20000);
   window.addEventListener('beforeunload',e=>{if(pendente||salvando){e.preventDefault();e.returnValue=''}});
 }
-boot();
+boot().catch(falha);
 </script>
