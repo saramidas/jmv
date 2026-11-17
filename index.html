@@ -667,7 +667,7 @@ function abrirDivida(id){
      <button class="btn primary">Salvar alterações</button>
    </form>
    ${ps.length?`<h3>Parcelas (${ps.length})</h3><div class="list">${ps.map(x=>{const r=restP(x.p),pp=x.s!=='paga'&&x.p.pagoParc>0;return `<div class="li static"><span class="t">${x.i+1}/${ps.length} · ${fdate(x.p.venc)}</span><span class="amt">${fmt(x.s==='paga'?x.p.valor:r)}${pp?`<small>falta de ${fmt(x.p.valor)}</small>`:''}</span><span class="meta">${x.s==='paga'?'<span class="pill p-good">Paga</span>':x.s==='vencida'?'<span class="pill p-crit">Vencida</span>':'<span class="pill p-neu">A vencer</span>'}${pp?'<span class="pill p-warn">Paga em parte</span>':''}</span>${x.s!=='paga'&&!qt?`<span><button class="btn sm" data-act="pagar" data-id="${d.id}" data-alvo="${x.i}">Pagar</button></span>`:''}</div>`}).join('')}</div>`:''}
-   ${d.pagamentos.length?`<h3>Pagamentos</h3><div class="list">${d.pagamentos.map(p=>`<div class="li static"><span class="t">${fdate(p.data)} · ${esc(rotPag(d,p))}</span><span class="amt">${fmt(p.valor)}${p.desconto>0?`<small>desconto ${fmt(p.desconto)}</small>`:''}</span><span class="meta tiny muted">${p.semCaixa?'Pago antes, fora do caixa':'Saiu do caixa'}${p.motivo?` · Motivo: ${esc(p.motivo)}`:''}</span><span><button class="linkbtn" data-act="desfazerpag" data-id="${d.id}" data-pid="${p.id}">Desfazer</button></span></div>`).join('')}</div>`:''}
+   ${d.pagamentos.length?`<h3>Pagamentos</h3><div class="list">${d.pagamentos.map(p=>`<div class="li static"><span class="t">${fdate(p.data)} · ${esc(rotPag(d,p))}</span><span class="amt">${fmt(p.valor)}${p.desconto>0?`<small>desconto ${fmt(p.desconto)}</small>`:''}</span><span class="meta tiny muted">${p.permuta?`Permuta${p.permutaDesc?': '+esc(p.permutaDesc):''} · não saiu do caixa`:p.semCaixa?'Pago antes, fora do caixa':'Saiu do caixa'}${p.motivo?` · Motivo: ${esc(p.motivo)}`:''}</span><span><button class="linkbtn" data-act="desfazerpag" data-id="${d.id}" data-pid="${p.id}">Desfazer</button></span></div>`).join('')}</div>`:''}
    <button class="btn ghost danger sm" data-act="apagardiv" data-id="${d.id}">Apagar esta dívida</button>
   `,body=>{body.querySelector('#fdiv').onsubmit=e=>{e.preventDefault();
     const s=body.querySelector('#dsaldo');if(s&&s.value){const n=parseBRL(s.value);if(!(n>=0)){return fieldErr(s,'Use números, por exemplo 25.000,00')}d.saldo=n}
@@ -711,8 +711,10 @@ function pagarDivida(id,modo,preset){
   openSheet(titulo,`<form id="fpg">
     <p class="small">${expl}</p>
     <div class="field"><label for="pval">${modo==='quitar'?'Valor pago para quitar':'Valor pago'}</label><input id="pval" class="big" inputmode="decimal" value="${preset||(sug?vBRL(sug):'')}" placeholder="0,00"><span class="hint" id="pinfo"></span></div>
-    <div class="two"><div class="field"><label for="pdata">Data</label><input id="pdata" type="date" value="${HOJE}"></div><div class="field"><label for="pforma">Forma</label><select id="pforma">${FORMAS.map(f=>`<option>${f}</option>`).join('')}</select></div></div>
-    <label class="check"><input type="checkbox" id="pcx" checked> Lançar a saída no caixa</label>
+    <div class="two"><div class="field"><label for="pdata">Data</label><input id="pdata" type="date" value="${HOJE}"></div><div class="field"><label for="pforma">Forma</label><select id="pforma">${[...FORMAS,'Permuta'].map(f=>`<option>${f}</option>`).join('')}</select></div></div>
+    <div id="pperm" hidden><div class="field"><label for="pperd">O que foi dado em troca</label><input id="pperd" placeholder="Ex.: madeira, serviço de frete, equipamento"></div>
+    <p class="small muted">Permuta abate a dívida sem tirar dinheiro do caixa.</p></div>
+    <label class="check" id="pcxl"><input type="checkbox" id="pcx" checked> Lançar a saída no caixa</label>
     <p class="small muted" id="pcxh" hidden>Use quando o pagamento já foi feito antes de começar a usar o sistema. Abate a dívida sem mexer no caixa.</p>
     <div id="pregra" ${f1?'':'hidden'}><div class="warnbox"><b>Fora da regra do plano.</b><span>O caixa livre está em ${fmt(caixaLivre())}, abaixo da meta de ${fmtK(state.config.meta)}. Pagar agora tira dinheiro da compra de matéria-prima. Registre só se houver um motivo forte.</span></div>
     <div class="field"><label for="pmot">Motivo</label><select id="pmot"><option value="">Escolha o motivo</option><option>Bem essencial em risco de busca e apreensão</option><option>Acordo com desconto grande</option><option>Ordem judicial ou bloqueio</option><option>Credor bloqueia a operação</option><option>Outro motivo combinado com a direção</option></select></div></div>
@@ -723,16 +725,18 @@ function pagarDivida(id,modo,preset){
         if(modo==='parcial'&&v>0){t=v>=total-0.005?'Esse valor cobre tudo. Use Quitar dívida.':`Depois deste pagamento, falta ${fmt(total-v)}.`}
         if(parc&&v>0){t=v>restP(P)+0.005?'Maior que a parcela. Use Pagamento parcial para abater outras parcelas.':v<restP(P)-0.005?`A parcela fica paga em parte, faltando ${fmt(restP(P)-v)}.`:''}
         q('#pinfo').textContent=t};
-      const cx=()=>{const on=q('#pcx').checked;q('#pcxh').hidden=on;q('#pregra').hidden=!(f1&&on);q('#pbtn').className='btn '+(f1&&on?'':'primary')};
-      q('#pval').addEventListener('input',info);q('#pcx').addEventListener('change',cx);info();cx();
+      const perm=()=>q('#pforma').value==='Permuta';
+      const cx=()=>{const pm=perm(),on=!pm&&q('#pcx').checked;q('#pperm').hidden=!pm;q('#pcxl').hidden=pm;q('#pcxh').hidden=on||pm;q('#pregra').hidden=!(f1&&on);q('#pbtn').className='btn '+(f1&&on?'':'primary')};
+      q('#pval').addEventListener('input',info);q('#pcx').addEventListener('change',cx);q('#pforma').addEventListener('change',cx);info();cx();
       q('#fpg').onsubmit=e=>{e.preventDefault();
         const v=parseBRL(q('#pval').value);if(!(v>0))return fieldErr(q('#pval'),'Informe o valor pago');
         if(modo==='parcial'&&!semValor&&v>=total-0.005)return fieldErr(q('#pval'),'Esse valor quita a dívida. Use Quitar dívida.');
         if(modo==='parcial'&&semValor&&v>sum(d.parcelas,restP)+0.005)return fieldErr(q('#pval'),'Maior que as parcelas em aberto. Informe antes o valor vencido.');
         if(parc&&v>restP(P)+0.005)return fieldErr(q('#pval'),'Maior que o que falta da parcela');
-        const lanca=q('#pcx').checked,mot=lanca&&f1?q('#pmot').value:'';
+        const pm=perm(),lanca=!pm&&q('#pcx').checked,mot=lanca&&f1?q('#pmot').value:'';
         if(lanca&&f1&&!mot)return fieldErr(q('#pmot'),'Escolha o motivo para pagar antes da meta');
-        const data=q('#pdata').value||HOJE;const pg={id:uid(),data,valor:r2(v),tipo:modo==='quitar'?'quitacao':modo==='parcial'?'parcial':'parcela',alvo:parc?String(modo):modo,motivo:mot,semCaixa:!lanca};
+        const data=q('#pdata').value||HOJE;const pg={id:uid(),data,valor:r2(v),tipo:modo==='quitar'?'quitacao':modo==='parcial'?'parcial':'parcela',alvo:parc?String(modo):modo,motivo:mot,semCaixa:!lanca,forma:q('#pforma').value};
+        if(pm){pg.permuta=true;pg.permutaDesc=q('#pperd').value.trim()}
         if(modo==='quitar'){pg.saldoAntes=d.saldo;
           if(semValor){d.saldo=r2(v-sum(d.parcelas,restP));if(d.saldo<0)d.saldo=0}
           pg.aloc=alocar(d,totalDe(d));if(!semValor)pg.desconto=Math.max(0,r2(total-v));
